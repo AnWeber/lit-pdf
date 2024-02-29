@@ -5,16 +5,22 @@ import { defineConfig } from "vite";
 
 import eslint from "vite-plugin-eslint";
 
-
 export default defineConfig({
-  base: '/lit-pdf/',
   plugins: [
     eslint({
       failOnWarning: false,
       failOnError: false,
     }),
   ],
+  optimizeDeps: {
+    esbuildOptions: {
+      target: "esnext",
+    },
+  },
+  build: {
+    target: "esnext",
+  },
   test: {
-    environment: 'jsdom',
+    environment: "jsdom",
   },
 });

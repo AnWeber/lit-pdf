@@ -3,7 +3,7 @@
  */
 import { LitElement, html, css, PropertyValues } from "lit";
 import { property, query } from "lit/decorators.js";
-
+import { ResizeController } from "@lit-labs/observers/resize-controller.js";
 import {
   getDocument,
   GlobalWorkerOptions,
@@ -11,19 +11,11 @@ import {
   PDFPageProxy,
 } from "pdfjs-dist";
 
-
 import { customElementIfNotExists } from "./custom-element.js";
 
-GlobalWorkerOptions.workerSrc = "node_modules/pdfjs-dist/build/pdf.worker.js";
+GlobalWorkerOptions.workerSrc = "node_modules/pdfjs-dist/build/pdf.worker.mjs";
 @customElementIfNotExists("pdf-viewer")
 export class PdfViewer extends LitElement {
-  static styles = css`
-    :host {
-      display: block;
-      overflow: auto;
-    }
-  `;
-
   @property({ type: String, reflect: true })
   src?: string;
 
@@ -40,13 +32,40 @@ export class PdfViewer extends LitElement {
       return 1;
     },
   })
-  scale: number | "cover" | "contain" = "cover";
+  public scale: number | "cover" | "contain" = "cover";
 
   @property({ type: Number, reflect: true })
-  page = 1;
+  public page = 1;
+
+  private _renderPageThrottled: () => void;
+
+  public constructor() {
+    super();
+    let lastRenderSize = this.clientWidth;
+    this._renderPageThrottled = throttle(() => {
+      const width = this.clientWidth;
+      if (typeof this.scale === "string" && lastRenderSize !== width) {
+        lastRenderSize = width;
+        this.renderPage();
+      }
+    });
+    // eslint-disable-next-line no-new
+    new ResizeController(this, {
+      target: this,
+    });
+  }
+
+  static styles = css`
+    :host {
+      display: flex;
+      overflow: auto;
+      justify-content: center;
+      align-items: flex-start;
+    }
+  `;
 
   @query("canvas")
-  public _viewerElement: HTMLCanvasElement | undefined;
+  private _viewerElement: HTMLCanvasElement | undefined;
 
   private _pdf: PDFDocumentProxy | undefined;
 
@@ -54,17 +73,21 @@ export class PdfViewer extends LitElement {
     return this._pdf;
   }
 
-  get numPages(): number | undefined {
+  public get numPages(): number | undefined {
     return this._pdf?.numPages;
   }
 
   render() {
-    return html`<canvas class="page"></canvas>`;
+    return html` <canvas class="pdf__canvas"></canvas> `;
   }
 
   async updated(changedProperties: PropertyValues) {
     if (changedProperties.has("src")) {
       this.load();
+    } else if (changedProperties.size === 0) {
+      this._renderPageThrottled();
+    } else {
+      this.renderPage();
     }
   }
 
@@ -88,20 +111,30 @@ export class PdfViewer extends LitElement {
     if (typeof this.scale === "number") {
       return this.scale;
     }
-    const ptToPx: number = 96.0 / 72.0;
 
     const viewPort = page.getViewport({
       scale: 1,
-      rotation: 0,
     });
+    const scrollbarWidth = 20;
     const availableWidth = this.offsetWidth;
     const availableHeight = this.offsetHeight;
-    const viewportWidthPx = viewPort.width * ptToPx;
-    const viewportHeightPx = viewPort.height * ptToPx;
+    const viewportWidthPx = viewPort.width;
+    const viewportHeightPx = viewPort.height;
     const fitWidthScale = availableWidth / viewportWidthPx;
     const fitHeightScale = availableHeight / viewportHeightPx;
+    const fitWidthScaleWithoutScrollbar =
+      (availableWidth - scrollbarWidth) / viewportWidthPx;
+    const fitHeightScaleWithoutScrollbar =
+      (availableHeight - scrollbarWidth) / viewportHeightPx;
     if (this.scale === "cover") {
-      return Math.max(fitWidthScale, fitHeightScale);
+      const scale = Math.max(fitWidthScale, fitHeightScale);
+      if (scale > 1) {
+        return Math.max(
+          fitWidthScaleWithoutScrollbar,
+          fitHeightScaleWithoutScrollbar
+        );
+      }
+      return scale;
     }
     return Math.min(fitWidthScale, fitHeightScale);
   }
@@ -111,6 +144,7 @@ export class PdfViewer extends LitElement {
   }
 
   private async renderPage() {
+    console.info("renderpage");
     if (this._pdf) {
       const page = await this._pdf.getPage(this.validPage);
       const viewport = page.getViewport({ scale: this.getCurrentScale(page) });
@@ -124,4 +158,11 @@ export class PdfViewer extends LitElement {
       }
     }
   }
+}
+function throttle(f: () => void, delay = 100) {
+  let timer = 0;
+  return function () {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => f(), delay);
+  };
 }
