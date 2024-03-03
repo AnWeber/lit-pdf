@@ -19,6 +19,7 @@ export default defineConfig({
   },
   build: {
     target: "esnext",
+    copyPublicDir: false,
   },
   test: {
     environment: "jsdom",

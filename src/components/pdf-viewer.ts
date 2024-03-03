@@ -10,10 +10,15 @@ import {
   PDFDocumentProxy,
   PDFPageProxy,
 } from "pdfjs-dist";
+import pdfWorkerSource from "pdfjs-dist/build/pdf.worker.min.mjs?raw";
 
 import { customElementIfNotExists } from "./custom-element.js";
 
-GlobalWorkerOptions.workerSrc = "node_modules/pdfjs-dist/build/pdf.worker.mjs";
+GlobalWorkerOptions.workerSrc = URL.createObjectURL(
+  new Blob([pdfWorkerSource], {
+    type: "text/javascript",
+  })
+);
 @customElementIfNotExists("pdf-viewer")
 export class PdfViewer extends LitElement {
   @property({ type: String, reflect: true })
@@ -37,6 +42,9 @@ export class PdfViewer extends LitElement {
   @property({ type: Number, reflect: true })
   public page = 1;
 
+  @property({ type: Number, reflect: true })
+  public rotation = 0;
+
   private _renderPageThrottled: () => void;
 
   public constructor() {
@@ -55,7 +63,7 @@ export class PdfViewer extends LitElement {
     });
   }
 
-  static styles = css`
+  public static override styles = css`
     :host {
       display: flex;
       overflow: auto;
@@ -73,11 +81,12 @@ export class PdfViewer extends LitElement {
     return this._pdf;
   }
 
+  /** count of pages of pdf */
   public get numPages(): number | undefined {
     return this._pdf?.numPages;
   }
 
-  render() {
+  public override render() {
     return html` <canvas class="pdf__canvas"></canvas> `;
   }
 
@@ -114,6 +123,7 @@ export class PdfViewer extends LitElement {
 
     const viewPort = page.getViewport({
       scale: 1,
+      rotation: this.rotation,
     });
     const scrollbarWidth = 20;
     const availableWidth = this.offsetWidth;
@@ -147,7 +157,10 @@ export class PdfViewer extends LitElement {
     console.info("renderpage");
     if (this._pdf) {
       const page = await this._pdf.getPage(this.validPage);
-      const viewport = page.getViewport({ scale: this.getCurrentScale(page) });
+      const viewport = page.getViewport({
+        scale: this.getCurrentScale(page),
+        rotation: this.rotation,
+      });
       if (this._viewerElement) {
         this._viewerElement.height = viewport.height;
         this._viewerElement.width = viewport.width;

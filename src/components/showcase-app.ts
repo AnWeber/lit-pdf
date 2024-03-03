@@ -16,6 +16,9 @@ export class ShowcaseApp extends LitElement {
       <button @click=${() => this.setScale(0.5)}>50%</button>
       <button @click=${() => this.setScale(0.8)}>80%</button>
       <button @click=${() => this.setScale(1)}>100%</button>
+      <button @click=${() => this.setRotation(90)}>90%</button>
+      <button @click=${() => this.setRotation(180)}>180</button>
+      <button @click=${() => this.setRotation(0)}>0</button>
     </div>`;
   }
 
@@ -51,5 +54,9 @@ export class ShowcaseApp extends LitElement {
 
   private setScale(scale: number | "cover" | "contain") {
     this.pdfViewer.scale = scale;
+  }
+
+  private setRotation(rotation: number) {
+    this.pdfViewer.rotation = rotation;
   }
 }
