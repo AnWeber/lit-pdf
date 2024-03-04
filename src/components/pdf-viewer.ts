@@ -7,6 +7,7 @@ import { ResizeController } from "@lit-labs/observers/resize-controller.js";
 import {
   getDocument,
   GlobalWorkerOptions,
+  PageViewport,
   PDFDocumentProxy,
   PDFPageProxy,
 } from "pdfjs-dist";
@@ -45,6 +46,7 @@ export class PdfViewer extends LitElement {
   @property({ type: Number, reflect: true })
   public rotation = 0;
 
+  private _viewport: PageViewport | undefined;
   private _renderPageThrottled: () => void;
 
   public constructor() {
@@ -63,15 +65,6 @@ export class PdfViewer extends LitElement {
     });
   }
 
-  public static override styles = css`
-    :host {
-      display: flex;
-      overflow: auto;
-      justify-content: center;
-      align-items: flex-start;
-    }
-  `;
-
   @query("canvas")
   private _viewerElement: HTMLCanvasElement | undefined;
 
@@ -87,8 +80,31 @@ export class PdfViewer extends LitElement {
   }
 
   public override render() {
-    return html` <canvas class="pdf__canvas"></canvas> `;
+    return html`
+      <slot
+        @scaleChange=${this.scaleChange}
+        @rotationChange=${this.rotationChange}
+      >
+        <pdf-viewer-toolbar></pdf-viewer-toolbar
+      ></slot>
+      <div class="pdfviewer__content" @wheel=${this.zoomWithWheel}>
+        <canvas class="pdf__canvas"></canvas>
+      </div>
+    `;
   }
+  public static override styles = css`
+    :host {
+      display: flex;
+      flex-direction: column;
+      background-color: white;
+    }
+    .pdfviewer__content {
+      flex-grow: 1;
+      overflow: auto;
+      justify-content: center;
+      align-items: flex-start;
+    }
+  `;
 
   async updated(changedProperties: PropertyValues) {
     if (changedProperties.has("src")) {
@@ -116,7 +132,27 @@ export class PdfViewer extends LitElement {
     }
   }
 
-  private getCurrentScale(page: PDFPageProxy) {
+  private zoomWithWheel(evt: WheelEvent) {
+    if (evt.ctrlKey && this._viewport) {
+      console.info(evt);
+
+      const delta = evt.deltaY * -0.001;
+      console.info(evt, delta);
+      this.scale = this._viewport.scale + delta;
+      evt.stopPropagation();
+      evt.preventDefault();
+    }
+  }
+
+  private updateViewport(page: PDFPageProxy): PageViewport {
+    this._viewport = page.getViewport({
+      scale: this.calculateScale(page),
+      rotation: this.rotation,
+    });
+    return this._viewport;
+  }
+
+  private calculateScale(page: PDFPageProxy) {
     if (typeof this.scale === "number") {
       return this.scale;
     }
@@ -155,21 +191,25 @@ export class PdfViewer extends LitElement {
 
   private async renderPage() {
     console.info("renderpage");
-    if (this._pdf) {
+    if (this._pdf && this._viewerElement) {
       const page = await this._pdf.getPage(this.validPage);
-      const viewport = page.getViewport({
-        scale: this.getCurrentScale(page),
-        rotation: this.rotation,
-      });
-      if (this._viewerElement) {
-        this._viewerElement.height = viewport.height;
-        this._viewerElement.width = viewport.width;
-        const canvasContext = this._viewerElement.getContext("2d");
-        if (canvasContext) {
-          page.render({ canvasContext, viewport });
-        }
+      const viewport = this.updateViewport(page);
+
+      this._viewerElement.height = viewport.height;
+      this._viewerElement.width = viewport.width;
+
+      const canvasContext = this._viewerElement.getContext("2d");
+      if (canvasContext) {
+        page.render({ canvasContext, viewport });
       }
     }
+  }
+
+  private scaleChange(evt: CustomEvent<number>) {
+    this.scale = evt.detail;
+  }
+  private rotationChange(evt: CustomEvent<number>) {
+    this.rotation = evt.detail;
   }
 }
 function throttle(f: () => void, delay = 100) {
