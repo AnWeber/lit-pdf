@@ -47,18 +47,10 @@ export class PdfViewer extends LitElement {
   public rotation = 0;
 
   private _viewport: PageViewport | undefined;
-  private _renderPageThrottled: () => void;
 
   public constructor() {
     super();
-    let lastRenderSize = this.clientWidth;
-    this._renderPageThrottled = throttle(() => {
-      const width = this.clientWidth;
-      if (typeof this.scale === "string" && lastRenderSize !== width) {
-        lastRenderSize = width;
-        this.renderPage();
-      }
-    });
+
     // eslint-disable-next-line no-new
     new ResizeController(this, {
       target: this,
@@ -109,8 +101,6 @@ export class PdfViewer extends LitElement {
   async updated(changedProperties: PropertyValues) {
     if (changedProperties.has("src")) {
       this.load();
-    } else if (changedProperties.size === 0) {
-      this._renderPageThrottled();
     } else {
       this.renderPage();
     }
@@ -121,7 +111,6 @@ export class PdfViewer extends LitElement {
       this._pdf = await getDocument({
         url: this.src,
       }).promise;
-
       await this.renderPage();
     } catch (e) {
       this.dispatchEvent(
@@ -211,11 +200,4 @@ export class PdfViewer extends LitElement {
   private rotationChange(evt: CustomEvent<number>) {
     this.rotation = evt.detail;
   }
-}
-function throttle(f: () => void, delay = 100) {
-  let timer = 0;
-  return function () {
-    window.clearTimeout(timer);
-    timer = window.setTimeout(() => f(), delay);
-  };
 }
